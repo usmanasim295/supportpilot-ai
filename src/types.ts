@@ -13,12 +13,21 @@ export interface TicketSummary {
   category: string;
 }
 
+export interface OrderSummaryData {
+  orderId: string;
+  status: string;
+  estimatedDeliveryDate: string;
+  carrier: string | null;
+  items: { name: string; quantity: number }[];
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: string;
   citations?: SourceCitation[];
+  order?: OrderSummaryData;
   ticket?: TicketSummary;
   state?: "complete" | "pending" | "error";
 }

@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handleChatRequest } from "@/app/api/chat/route";
+import type { SupportAgent } from "@/lib/bedrock/agent";
+import { BedrockInvocationError } from "@/lib/bedrock/invoke";
+import { resolveModel } from "@/lib/bedrock/model-registry";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/validation/chat";
 
 function request(body: string) {
@@ -33,11 +36,38 @@ describe("POST /api/chat", () => {
     await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "MODEL_NOT_CONFIGURED" } });
   });
 
-  it("returns the documented placeholder when a model is configured", async () => {
+  it("returns agent data when a model is configured and agent is injected", async () => {
+    const agent: SupportAgent = {
+      respond: vi.fn().mockResolvedValue({
+        message: "Returns are accepted within 30 days.",
+        citations: [{ id: "1", title: "Returns", path: "returns.md", excerpt: "30 days" }],
+      }),
+    };
     const response = await handleChatRequest(request(JSON.stringify({ message: "What is your return policy?" })), {
-      env: { BEDROCK_MODEL_ID: "global.anthropic.claude-sonnet-5-5" },
+      env: { AWS_REGION: "us-east-1", BEDROCK_MODEL_ID: "global.anthropic.claude-sonnet-5-5" },
+      agent,
     });
-    expect(response.status).toBe(501);
-    await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "NOT_IMPLEMENTED" } });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      data: { message: "Returns are accepted within 30 days.", citations: [{ title: "Returns" }] },
+    });
+  });
+
+  it("maps throttling errors from the agent", async () => {
+    const agent: SupportAgent = {
+      respond: vi.fn().mockRejectedValue(new BedrockInvocationError("THROTTLED", "busy", true)),
+    };
+    const model = resolveModel("claude-sonnet-5-5", {
+      AWS_REGION: "us-east-1",
+      BEDROCK_SONNET_55_MODEL_ID: "global.anthropic.claude-sonnet-5-5",
+    });
+    expect(model.configuredModelId).toBeTruthy();
+    const response = await handleChatRequest(request(JSON.stringify({ message: "hello", modelKey: "claude-sonnet-5-5" })), {
+      env: { AWS_REGION: "us-east-1", BEDROCK_SONNET_55_MODEL_ID: "global.anthropic.claude-sonnet-5-5" },
+      agent,
+    });
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "THROTTLED", retryable: true } });
   });
 });

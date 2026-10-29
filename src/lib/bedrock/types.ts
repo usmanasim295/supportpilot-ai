@@ -1,4 +1,4 @@
-import type { SourceCitation } from "@/types";
+import type { SourceCitation, TicketSummary } from "@/types";
 
 export type ModelKey =
   | "claude-opus-4-8"
@@ -34,9 +34,40 @@ export interface AgentRequest {
   model: ModelDefinition;
 }
 
+export interface AgentOrderResult {
+  orderId: string;
+  status: string;
+  estimatedDeliveryDate: string;
+  carrier: string | null;
+  items: { name: string; quantity: number }[];
+}
+
 export interface AgentResponse {
   message: string;
   citations: SourceCitation[];
+  order?: AgentOrderResult;
+  ticket?: TicketSummary;
+}
+
+export class AgentLoopLimitError extends Error {
+  constructor() {
+    super("The support agent exceeded the maximum tool loop iterations.");
+    this.name = "AgentLoopLimitError";
+  }
+}
+
+export class MalformedModelOutputError extends Error {
+  constructor(message = "The model returned an unexpected response format.") {
+    super(message);
+    this.name = "MalformedModelOutputError";
+  }
+}
+
+export class UnsupportedModelCapabilityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedModelCapabilityError";
+  }
 }
 
 export interface BedrockConversePort {

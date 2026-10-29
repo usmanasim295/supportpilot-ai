@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { placeholderAgent, type SupportAgent } from "@/lib/bedrock/agent";
+import type { SupportAgent } from "@/lib/bedrock/agent";
+import { mapAgentError } from "@/lib/bedrock/errors";
+import { getSupportAgent } from "@/lib/bedrock/factory";
 import { resolveModel, type Environment } from "@/lib/bedrock/model-registry";
-import { AgentNotImplementedError } from "@/lib/bedrock/types";
 import { chatRequestSchema, MAX_CHAT_REQUEST_BYTES } from "@/lib/validation/chat";
 import type { ApiResponse } from "@/types";
 
@@ -40,20 +41,24 @@ export async function handleChatRequest(
         503,
       );
     }
-    const result = await (dependencies.agent ?? placeholderAgent).respond({ ...input, model });
+    let agent: SupportAgent;
+    try {
+      agent = dependencies.agent ?? getSupportAgent();
+    } catch {
+      return errorResponse(
+        "MODEL_NOT_CONFIGURED",
+        "AWS_REGION is not configured. Set server-side AWS environment variables before invoking Bedrock.",
+        503,
+      );
+    }
+    const result = await agent.respond({ ...input, model, conversationId: input.conversationId });
     return NextResponse.json<ApiResponse<typeof result>>({ ok: true, data: result });
   } catch (error) {
     if (error instanceof ZodError) {
       return errorResponse("VALIDATION_ERROR", error.issues[0]?.message ?? "Invalid request.", 400);
     }
-    if (error instanceof AgentNotImplementedError) {
-      return errorResponse(
-        "NOT_IMPLEMENTED",
-        "The Bedrock support agent is intentionally not implemented in this starter. Complete src/lib/bedrock/agent.ts to enable responses.",
-        501,
-      );
-    }
-    return errorResponse("INTERNAL_ERROR", "Support is temporarily unavailable. Please try again later.", 500, true);
+    const mapped = mapAgentError(error);
+    return errorResponse(mapped.code, mapped.message, mapped.status, mapped.retryable);
   }
 }
 

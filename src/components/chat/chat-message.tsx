@@ -1,6 +1,7 @@
 import { Bot, RefreshCw, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage as Message } from "@/types";
+import { OrderSummary } from "./order-summary";
 import { SourceCitation } from "./source-citation";
 import { TicketConfirmation } from "./ticket-confirmation";
 
@@ -31,6 +32,7 @@ export function ChatMessage({ message, onRetry }: { message: Message; onRetry?()
               <RefreshCw className="size-3.5" /> Retry
             </Button>
           )}
+          {message.order && <OrderSummary order={message.order} />}
           {message.ticket && <TicketConfirmation ticket={message.ticket} />}
         </div>
         {message.citations && message.citations.length > 0 && (
