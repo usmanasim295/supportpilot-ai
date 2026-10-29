@@ -32,7 +32,7 @@ const starterMessage: ChatMessage = {
   id: "setup",
   role: "assistant",
   content:
-    "This starter is ready for a candidate to connect Amazon Bedrock. Until the agent is implemented and a model is configured, I’ll report that honestly instead of generating a support answer.",
+    "Hi! I can answer policy questions from our documents, look up your orders, and open support tickets. Select a configured Bedrock model to get started.",
   createdAt: new Date(0).toISOString(),
   state: "complete",
 };
@@ -40,12 +40,14 @@ const starterMessage: ChatMessage = {
 export function ChatWindow({ models }: { models: Omit<ModelDefinition, "envVar">[] }) {
   const defaultKey = (models.find((model) => model.key === "claude-sonnet-5-5")?.key ?? models[0].key) as ModelKey;
   const [modelKey, setModelKey] = useState<ModelKey>(defaultKey);
+  const [conversationId, setConversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([starterMessage]);
   const [pending, setPending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const lastUserMessage = useMemo(() => [...messages].reverse().find((message) => message.role === "user")?.content, [messages]);
 
   function newConversation() {
+    setConversationId(crypto.randomUUID());
     setMessages([starterMessage]);
     setSidebarOpen(false);
   }
@@ -73,12 +75,24 @@ export function ChatWindow({ models }: { models: Omit<ModelDefinition, "envVar">
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: content, modelKey }),
+        body: JSON.stringify({ message: content, modelKey, conversationId }),
       });
-      const result = (await response.json()) as ApiResponse<{ message: string }>;
+      const result = (await response.json()) as ApiResponse<{
+        message: string;
+        citations?: ChatMessage["citations"];
+        order?: ChatMessage["order"];
+        ticket?: ChatMessage["ticket"];
+      }>;
       if (!result.ok) throw new Error(result.error.message);
       setMessages((current) => current.map((message) => message.id === pendingId
-        ? { ...message, content: result.data.message, state: "complete" }
+        ? {
+            ...message,
+            content: result.data.message,
+            citations: result.data.citations,
+            order: result.data.order,
+            ticket: result.data.ticket,
+            state: "complete",
+          }
         : message));
     } catch (error) {
       setMessages((current) => current.map((message) => message.id === pendingId

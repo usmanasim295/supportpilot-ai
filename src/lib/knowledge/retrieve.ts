@@ -35,10 +35,15 @@ export class LocalPolicyRetriever implements PolicyRetriever {
           score,
         };
       })
-      .filter((passage) => passage.score > 0)
+      .filter((passage) => passage.score >= minimumScore(terms.length))
       .sort((a, b) => b.score - a.score)
       .slice(0, options.limit ?? 3);
   }
+}
+
+function minimumScore(termCount: number) {
+  if (termCount <= 1) return 1;
+  return Math.max(0.34, 1 / termCount);
 }
 
 function tokenize(value: string) {
